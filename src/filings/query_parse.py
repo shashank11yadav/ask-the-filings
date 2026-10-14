@@ -1,22 +1,13 @@
-"""
-query_parse.py - works out which company (and fiscal year) a question is about.
+"""Rule-based detection of the company and fiscal year a question is about.
 
-Why: without filters, search looks through ALL companies' filings, and very similar
-boilerplate ("we use interest rate swaps to hedge...") from the wrong company can push out
-the right chunk. Our eval showed recall dropping from 0.92 to 0.77 without filters.
-
-How: simple rules, no LLM call (so it's instant and free):
-  - company: look for a known name or ticker in the question ("Apple's", "JPMorgan", "NVDA")
-  - year:    only if the question mentions exactly ONE year we have a filing for
-
-If nothing is detected we return None and search runs over everything, which is the safe default.
+Without a company filter, near-identical boilerplate from other companies crowds out the answer
+(realistic recall 0.77 without it, 0.88 with it). When unsure, return None and search everything.
 """
 
 import re
 from dataclasses import dataclass
 
-# Names people use for each company -> ticker. Add a line here when you ingest a new company.
-# Matching is case-insensitive and on whole words, so "Apple" won't match "pineapple".
+# Whole-word, case-insensitive. Add an entry when a new company is ingested.
 ALIASES: dict[str, list[str]] = {
     "AAPL": ["apple"],
     "MSFT": ["microsoft", "linkedin"],
@@ -40,25 +31,21 @@ class ParsedQuery:
 
 
 def _pattern(alias: str) -> re.Pattern:
-    # \b = word boundary. Allows a possessive "'s" after the name ("Apple's").
     return re.compile(rf"\b{re.escape(alias)}\b", re.IGNORECASE)
 
 
-# Build the patterns once. Each ticker also matches its own symbol, case-sensitive ("NVDA").
+# Tickers also match their own symbol, case-sensitively.
 _PATTERNS: dict[str, list[re.Pattern]] = {
     t: [_pattern(a) for a in names] + [re.compile(rf"\b{t}\b")] for t, names in ALIASES.items()
 }
 
 
 def parse_query(question: str, known_years: set[int] | None = None) -> ParsedQuery:
-    """Detect the company and fiscal year a question refers to (None when unsure)."""
-    # Company: keep it only if exactly one company is mentioned. A question naming two
-    # companies ("Compare Apple and Microsoft...") must search both, so no filter.
+    # More than one company mentioned means a comparison: don't filter.
     found = {t for t, pats in _PATTERNS.items() if any(p.search(question) for p in pats)}
     ticker = found.pop() if len(found) == 1 else None
 
-    # Year: only filter if exactly one year is mentioned AND we have that fiscal year loaded.
-    # "2024 and 2023" -> no filter: the 2024 10-K also reports 2023 numbers, so either could answer.
+    # Only a single loaded year is used: a 2024 10-K also reports 2023 figures.
     years = {int(y) for y in YEAR_RE.findall(question)}
     year = None
     if len(years) == 1 and (known_years is None or next(iter(years)) in known_years):

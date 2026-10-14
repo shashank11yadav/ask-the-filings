@@ -1,0 +1,162 @@
+[
+  {
+    "ticker": "AAPL",
+    "fiscal_year": 2024,
+    "cik": 320193,
+    "accession": "0000320193-24-000123",
+    "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+    "text_sha256": "c1b91e08fb143f8781acf30eb6c92f89835d60314e7bf4d5fabf2585dad660de"
+  },
+  {
+    "ticker": "AAPL",
+    "fiscal_year": 2025,
+    "cik": 320193,
+    "accession": "0000320193-25-000079",
+    "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+    "text_sha256": "f3ec336559208df8e633569b38ab4f64e14d3e77ab391362c368dfbfca2d0815"
+  },
+  {
+    "ticker": "AMZN",
+    "fiscal_year": 2024,
+    "cik": 1018724,
+    "accession": "0001018724-25-000004",
+    "url": "https://www.sec.gov/Archives/edgar/data/1018724/000101872425000004/amzn-20241231.htm",
+    "text_sha256": "af56950f6bce95fc1cd194de7be245a5dca62a936a3231fac2dd7f749dc91360"
+  },
+  {
+    "ticker": "AMZN",
+    "fiscal_year": 2025,
+    "cik": 1018724,
+    "accession": "0001018724-26-000004",
+    "url": "https://www.sec.gov/Archives/edgar/data/1018724/000101872426000004/amzn-20251231.htm",
+    "text_sha256": "f59cf0d4135a5a2890f820029f3191b5b1bf8dd7f2e1172d5c692ec81a97332a"
+  },
+  {
+    "ticker": "GOOGL",
+    "fiscal_year": 2024,
+    "cik": 1652044,
+    "accession": "0001652044-25-000014",
+    "url": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000014/goog-20241231.htm",
+    "text_sha256": "b7525c31d01cf0daed3ff5d44e82b559c0b0d87feba924852b88f30e8616982a"
+  },
+  {
+    "ticker": "GOOGL",
+    "fiscal_year": 2025,
+    "cik": 1652044,
+    "accession": "0001652044-26-000018",
+    "url": "https://www.sec.gov/Archives/edgar/data/1652044/000165204426000018/goog-20251231.htm",
+    "text_sha256": "dbaa6bfcbd2240abc61c44b501aad594cbaf0df53081c102e72ed76084ba23a1"
+  },
+  {
+    "ticker": "JPM",
+    "fiscal_year": 2024,
+    "cik": 19617,
+    "accession": "0000019617-25-000270",
+    "url": "https://www.sec.gov/Archives/edgar/data/19617/000001961725000270/jpm-20241231.htm",
+    "text_sha256": "6d5fea6da9ed02d9e357a45738083f50c8bfc41387f6bf91513c7ffc93c78cf7"
+  },
+  {
+    "ticker": "JPM",
+    "fiscal_year": 2025,
+    "cik": 19617,
+    "accession": "0001628280-26-008131",
+    "url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026008131/jpm-20251231.htm",
+    "text_sha256": "e64a0d54aaf108267804d1ad285866886aea37571b1c438875ed7a091a368127"
+  },
+  {
+    "ticker": "MSFT",
+    "fiscal_year": 2025,
+    "cik": 789019,
+    "accession": "0000950170-25-100235",
+    "url": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/msft-20250630.htm",
+    "text_sha256": "292f0f3c1212573cc04661bb198f862a2ea711123b0230ce87a11a11455d2264"
+  },
+  {
+    "ticker": "MSFT",
+    "fiscal_year": 2026,
+    "cik": 789019,
+    "accession": "0001193125-26-323660",
+    "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+    "text_sha256": "e9852cdae068fb0619339e1adafcc288a5111c27b2b8c06a44c128b99e55890b"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2025,
+    "cik": 1045810,
+    "accession": "0001045810-25-000023",
+    "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/nvda-20250126.htm",
+    "text_sha256": "44faf673d41cf39403a4c6397e9b3b2686e70dc7fb0659295bf77111489baa52"
+  },
+  {
+    "ticker": "NVDA",
+    "fiscal_year": 2026,
+    "cik": 1045810,
+    "accession": "0001045810-26-000021",
+    "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
+    "text_sha256": "bcac1e1fbdba9f7a225b145361551ef06cd1eb2b729607febe75abe57fe1c429"
+  },
+  {
+    "ticker": "TSLA",
+    "fiscal_year": 2024,
+    "cik": 1318605,
+    "accession": "0001628280-25-003063",
+    "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828025003063/tsla-20241231.htm",
+    "text_sha256": "7b143b29c5b97b408c08e7b37c42ff6d4b4b32ec7ef7deabe5fbd1ef8347a8be"
+  },
+  {
+    "ticker": "TSLA",
+    "fiscal_year": 2025,
+    "cik": 1318605,
+    "accession": "0001628280-26-003952",
+    "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm",
+    "text_sha256": "9ef2f0f659c112860fbb31a4143cd43c1ce0e40b493c027b91ecd45a9b284bd2"
+  },
+  {
+    "ticker": "UNH",
+    "fiscal_year": 2024,
+    "cik": 731766,
+    "accession": "0000731766-25-000063",
+    "url": "https://www.sec.gov/Archives/edgar/data/731766/000073176625000063/unh-20241231.htm",
+    "text_sha256": "e8cf4c69105a20e3505c68685873208bb504113519c6a3430d1876135f442a55"
+  },
+  {
+    "ticker": "UNH",
+    "fiscal_year": 2025,
+    "cik": 731766,
+    "accession": "0000731766-26-000062",
+    "url": "https://www.sec.gov/Archives/edgar/data/731766/000073176626000062/unh-20251231.htm",
+    "text_sha256": "a1b4342297895d1d36ede48b5c596a098e111f1ea41332ad41d96e774531cce5"
+  },
+  {
+    "ticker": "WMT",
+    "fiscal_year": 2025,
+    "cik": 104169,
+    "accession": "0000104169-25-000021",
+    "url": "https://www.sec.gov/Archives/edgar/data/104169/000010416925000021/wmt-20250131.htm",
+    "text_sha256": "66e1937afa15e3752c736d59d3ebd33ca42abdd37d0d17c5db557ef6756d1867"
+  },
+  {
+    "ticker": "WMT",
+    "fiscal_year": 2026,
+    "cik": 104169,
+    "accession": "0000104169-26-000055",
+    "url": "https://www.sec.gov/Archives/edgar/data/104169/000010416926000055/wmt-20260131.htm",
+    "text_sha256": "aa3012c136c7ddfd4dda27ae639e3560385f6a0219dd0649c4bb2af266fdd027"
+  },
+  {
+    "ticker": "XOM",
+    "fiscal_year": 2024,
+    "cik": 34088,
+    "accession": "0000034088-25-000010",
+    "url": "https://www.sec.gov/Archives/edgar/data/34088/000003408825000010/xom-20241231.htm",
+    "text_sha256": "41e765d48b3c26cd3f5b8cf53a3ecb6e42a5d3db682b0f3fcb584582a863a9e7"
+  },
+  {
+    "ticker": "XOM",
+    "fiscal_year": 2025,
+    "cik": 34088,
+    "accession": "0000034088-26-000045",
+    "url": "https://www.sec.gov/Archives/edgar/data/34088/000003408826000045/xom-20251231.htm",
+    "text_sha256": "7fc139e513b20781d39e8de544c2a4072a26604d7e3d4045a3c4140c0e85e1b6"
+  }
+]

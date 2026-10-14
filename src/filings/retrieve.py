@@ -1,16 +1,4 @@
-"""
-retrieve.py - finds the chunks most relevant to a question ("the R in RAG").
-
-Four search modes, so the eval can compare them:
-  - "dense"  : meaning search. Embed the question, find chunks with the closest vectors.
-               Good at synonyms ("revenue" ~ "net sales"); weaker on exact terms and numbers.
-  - "sparse" : keyword search using Postgres full-text search (similar to BM25).
-               Good at exact words like "iPhone" or "Item 1A"; misses synonyms.
-  - "hybrid" : run both, then merge the two ranked lists with Reciprocal Rank Fusion (RRF).
-               Usually beats either one alone.
-  - "rerank" : hybrid search for ~30 candidates, then a cross-encoder re-sorts them (rerank.py).
-               Slower, but usually the most accurate.
-"""
+"""Chunk retrieval: dense (pgvector), sparse (Postgres full-text), hybrid (RRF) and reranked."""
 
 from dataclasses import dataclass
 from typing import Literal
@@ -26,21 +14,18 @@ Mode = Literal["dense", "sparse", "hybrid", "rerank"]
 
 @dataclass
 class Hit:
-    """One search result."""
-
     id: int
     ticker: str
     fiscal_year: int
     section: str | None
     text: str
-    score: float  # higher = more relevant (the scale depends on the search mode)
+    score: float  # higher is better; scale depends on the mode
 
 
 _COLS = "id, ticker, fiscal_year, section, text"
 
 
 def _filters(ticker: str | None, year: int | None) -> tuple[str, list]:
-    """Build optional WHERE conditions, e.g. only search Apple's 2025 filing."""
     clauses, params = [], []
     if ticker:
         clauses.append("ticker = %s")
@@ -52,26 +37,21 @@ def _filters(ticker: str | None, year: int | None) -> tuple[str, list]:
 
 
 def dense(conn, query: str, k: int, ticker=None, year=None) -> list[Hit]:
-    """Meaning search. `<=>` is pgvector's cosine-distance operator (0 = identical)."""
     where, params = _filters(ticker, year)
     q = embed_query(query)
     rows = conn.execute(
         f"SELECT {_COLS}, 1 - (embedding <=> %s) AS score FROM chunks WHERE TRUE{where}"
         " ORDER BY embedding <=> %s LIMIT %s",
-        [q, *params, q, k],  # values fill the %s placeholders in order (safe from SQL injection)
+        [q, *params, q, k],
     ).fetchall()
     return [Hit(*r) for r in rows]
 
 
 def sparse(conn, query: str, k: int, ticker=None, year=None) -> list[Hit]:
-    """Keyword search.
+    """Full-text search with the question's terms OR-ed together.
 
-    plainto_tsquery turns the question into stemmed keywords joined with AND ("&"):
-    'rang' & 'matur' & 'swap' & ... That would only match chunks containing EVERY word,
-    which almost never happens for a full-sentence question. So we swap each "&" for
-    "|" (OR): a chunk matches if it has ANY keyword. ts_rank_cd then scores chunks
-    higher the more keywords they contain and the closer together they are.
-    `@@` means "matches".
+    plainto_tsquery ANDs every term, so a full-sentence question matched almost nothing
+    (recall 0.23). OR-ing the terms and ranking with ts_rank_cd fixed that.
     """
     where, params = _filters(ticker, year)
     rows = conn.execute(
@@ -85,13 +65,8 @@ def sparse(conn, query: str, k: int, ticker=None, year=None) -> list[Hit]:
 
 
 def rrf(result_lists: list[list[Hit]], k: int, c: int = 60) -> list[Hit]:
-    """Reciprocal Rank Fusion: merge several ranked lists into one.
-
-    Each chunk gets 1 / (c + rank) points from every list it appears in. A chunk ranked
-    highly by BOTH searches ends up on top. We use ranks, not raw scores, because dense
-    and sparse scores are on different scales and can't be compared directly.
-    c=60 is the standard value from the original RRF paper.
-    """
+    """Reciprocal Rank Fusion. Uses ranks because dense and sparse scores aren't comparable;
+    c=60 is the value from the original paper."""
     scores: dict[int, float] = {}
     by_id: dict[int, Hit] = {}
     for hits in result_lists:
@@ -103,13 +78,11 @@ def rrf(result_lists: list[list[Hit]], k: int, c: int = 60) -> list[Hit]:
 
 
 def _hybrid(conn, query: str, k: int, ticker=None, year=None) -> list[Hit]:
-    """Fetch a bigger pool (4k) from each search, then fuse down to k with RRF."""
     pool = 4 * k
     return rrf([dense(conn, query, pool, ticker, year), sparse(conn, query, pool, ticker, year)], k)
 
 
 def rerank(conn, query: str, k: int, ticker=None, year=None) -> list[Hit]:
-    """Take the top `rerank_pool` hybrid results and re-sort them with the cross-encoder."""
     candidates = _hybrid(conn, query, max(k, settings.rerank_pool), ticker, year)
     scores = rerank_scores(query, [h.text for h in candidates])
     ranked = sorted(zip(candidates, scores), key=lambda pair: pair[1], reverse=True)[:k]
@@ -117,7 +90,6 @@ def rerank(conn, query: str, k: int, ticker=None, year=None) -> list[Hit]:
 
 
 def _known_years(conn) -> set[int]:
-    """Fiscal years we have filings for (used to decide whether a year in the question is usable)."""
     return {r[0] for r in conn.execute("SELECT DISTINCT fiscal_year FROM chunks").fetchall()}
 
 
@@ -129,10 +101,10 @@ def search(
     year=None,
     auto_filter: Literal["off", "company", "company+year"] = "company",
 ) -> list[Hit]:
-    """Main entry point: return the top `k` chunks for `query` using the chosen mode.
+    """Top `k` chunks for `query`.
 
-    If the caller doesn't pass a ticker/year, `auto_filter` tries to read them from the question
-    itself (query_parse.py). "company" was the best setting on our eval; see README.
+    Without an explicit ticker or year, the company (and optionally the year) is read from the
+    question. Company-only filtering scored best on the eval; adding the year made it worse.
     """
     with connect() as conn:
         if auto_filter != "off" and ticker is None and year is None:

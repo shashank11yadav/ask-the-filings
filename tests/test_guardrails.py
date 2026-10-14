@@ -1,5 +1,3 @@
-"""Tests for guardrails.py (input checks) and the output guardrails in answer.generate()."""
-
 import pytest
 
 from filings import answer as answer_mod

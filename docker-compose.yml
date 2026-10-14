@@ -1,16 +1,14 @@
-# docker-compose.yml - runs a Postgres database (with the pgvector extension) in Docker,
-# so you don't have to install Postgres yourself. Start it with `make db`.
 services:
   db:
-    image: pgvector/pgvector:pg16 # Postgres 16 with pgvector pre-installed
-    environment: # local-only credentials (they match DATABASE_URL in .env)
+    image: pgvector/pgvector:pg16
+    environment:  # local development only; matches the default DATABASE_URL
       POSTGRES_USER: filings
       POSTGRES_PASSWORD: filings
       POSTGRES_DB: filings
     ports:
-      - "5432:5432" # expose Postgres on localhost:5432
+      - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data # keep the data when the container restarts
+      - pgdata:/var/lib/postgresql/data
 
 volumes:
   pgdata:

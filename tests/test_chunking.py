@@ -1,9 +1,11 @@
-"""
-Tests for chunking.py. Run with `make test`. Each test feeds in a tiny fake filing
-and checks that the output looks the way we expect.
-"""
-
-from filings.chunking import chunk_text, html_to_text, split_sections
+from filings.chunking import (
+    TABLE_END,
+    TABLE_START,
+    chunk_by_tokens,
+    chunk_text,
+    html_to_text,
+    split_sections,
+)
 
 
 def test_html_to_text_flattens_tables():
@@ -33,12 +35,7 @@ def test_chunks_overlap_and_respect_sections():
     assert [c.chunk_index for c in chunks] == list(range(len(chunks)))
 
 
-# --- token-based / table-aware chunking (word count stands in for the tokenizer here) ---
-
-from filings.chunking import TABLE_END, TABLE_START, chunk_by_tokens
-
-
-def _words(s: str) -> int:
+def _words(s: str) -> int:  # stands in for the tokenizer
     return len(s.split())
 
 

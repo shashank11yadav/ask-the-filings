@@ -1,20 +1,7 @@
-"""
-guardrails.py - checks that run before and after Gemini, so the system stays on its job.
+"""Input limits and the fixed refusal texts used by answer.py.
 
-Before the model:
-  - check_question(): reject empty or very long questions (long inputs cost money and are a
-    common way to smuggle in instructions).
-
-Inside the model call (see answer.py):
-  - Gemini also labels each request: a real filing question, investment advice, a prediction,
-    or off-topic. Anything that isn't a filing question gets a fixed, polite refusal written
-    here, not by the model, so the wording can't be manipulated.
-  - The prompt says text inside <excerpt> tags is data, never instructions.
-
-After the model:
-  - An "answer" with no valid citation is turned into "couldn't find support".
-  - Numbers in the answer that don't appear in the cited passages are listed as warnings,
-    so the user (and the eval) can see possibly unsupported figures.
+Refusals are written here rather than taken from the model, so injected instructions can't
+change what a refusal says.
 """
 
 from typing import Literal
@@ -41,12 +28,11 @@ NO_SUPPORT = "I couldn't find support for an answer in the retrieved passages."
 
 
 class GuardrailError(ValueError):
-    """Raised when a question is rejected before reaching the model. The message is user-facing."""
+    """Question rejected before reaching the model; the message is shown to the user."""
 
 
 def check_question(question: str) -> str:
-    """Return the cleaned question, or raise GuardrailError with a message for the user."""
-    q = " ".join(question.split())  # collapse whitespace and newlines
+    q = " ".join(question.split())
     if not q:
         raise GuardrailError("Please type a question.")
     if len(q) > MAX_QUESTION_CHARS:

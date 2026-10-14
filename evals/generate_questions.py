@@ -1,22 +1,11 @@
-"""
-generate_questions.py - creates a first draft of the eval question set with Gemini's help.
+"""Draft eval questions with Gemini from passages of the downloaded filings.
 
-How it works: pick random passages from the downloaded filings, show each one to Gemini, and
-ask it to write a realistic question that the passage answers, plus the answer and a VERBATIM
-quote ("evidence") from the passage that proves it.
+Passages are sampled from the cleaned filing text rather than from database chunks, so the
+questions don't favour the current chunker. About half start at a table, and each question is
+tagged with source_type. Gemini is asked to paraphrase, since questions that copy the filing's
+wording flatter keyword search. Run `make check-questions` afterwards.
 
-Three choices keep the test fair:
-  - Passages are cut from the cleaned filing TEXT, not from the database chunks. If questions
-    came from chunks, every question would fit neatly inside one current chunk, which unfairly
-    favours whatever chunker you're using now when you compare it against a new one.
-  - Half the passages start at a table and half at ordinary text, and each question is tagged
-    "source_type": "table" or "text", so you can see results for each kind separately.
-  - Gemini is told to paraphrase instead of copying the passage's wording. Questions that reuse
-    the exact words make keyword search look better than it would be for real users.
-
-After generating, run `make check-questions` to catch broken or duplicate questions.
-
-Usage:  uv run python evals/generate_questions.py --n 60 [--out evals/questions.jsonl]
+    uv run python evals/generate_questions.py --n 60 [--out evals/questions.jsonl]
 """
 
 import argparse
@@ -30,8 +19,8 @@ from filings import llm
 from filings.chunking import TABLE_END, TABLE_START, html_to_text
 from filings.config import settings
 
-RAW_DIR = Path("data/raw")  # filings downloaded by ingest.py, named like AAPL_2025.html
-PASSAGE_WORDS = 300  # roughly how long each passage shown to Gemini is
+RAW_DIR = Path("data/raw")
+PASSAGE_WORDS = 300
 
 SYSTEM = """You write evaluation questions for a question-answering system over SEC 10-K filings.
 Given one excerpt, write a question an analyst might realistically ask that this excerpt answers.
@@ -45,8 +34,6 @@ If the excerpt has nothing worth asking about (boilerplate, table of contents, s
 
 
 class Generated(BaseModel):
-    """The JSON shape Gemini returns for each passage."""
-
     usable: bool
     question: str
     answer: str
@@ -54,7 +41,7 @@ class Generated(BaseModel):
 
 
 def load_filings() -> list[tuple[str, int, list[str]]]:
-    """Return [(ticker, fiscal_year, lines_of_clean_text), ...] for every downloaded filing."""
+    """[(ticker, fiscal_year, lines), ...] for every downloaded filing."""
     out = []
     for path in sorted(RAW_DIR.glob("*_*.html")):
         ticker, year = path.stem.rsplit("_", 1)
@@ -63,12 +50,12 @@ def load_filings() -> list[tuple[str, int, list[str]]]:
 
 
 def passage(lines: list[str], start: int) -> tuple[str, bool]:
-    """Take whole lines from `start` until ~PASSAGE_WORDS words. Returns (text, contains_table)."""
+    """Whole lines from `start` up to about PASSAGE_WORDS words. Returns (text, has_table)."""
     taken, words, has_table = [], 0, False
     for line in lines[start:]:
         if line in (TABLE_START, TABLE_END):
             has_table = has_table or line == TABLE_START
-            continue  # marker lines are for the chunker only
+            continue
         taken.append(line)
         words += len(line.split())
         if words >= PASSAGE_WORDS:
@@ -77,7 +64,7 @@ def passage(lines: list[str], start: int) -> tuple[str, bool]:
 
 
 def sample_passages(filings, n: int, rng: random.Random) -> list[tuple[str, int, str, str]]:
-    """Pick n passages: about half starting just before a table, half at a random text line."""
+    """About half start at a table (including its caption line), half at a random line."""
     picks = []
     for i in range(n):
         ticker, year, lines = rng.choice(filings)
@@ -86,26 +73,25 @@ def sample_passages(filings, n: int, rng: random.Random) -> list[tuple[str, int,
             table_starts = [j for j, ln in enumerate(lines) if ln == TABLE_START]
             if not table_starts:
                 continue
-            start = max(0, rng.choice(table_starts) - 1)  # -1: include the caption line above it
+            start = max(0, rng.choice(table_starts) - 1)
         else:
             start = rng.randrange(len(lines))
         text, has_table = passage(lines, start)
-        if len(text.split()) >= 80:  # skip tiny fragments at the very end of a document
+        if len(text.split()) >= 80:
             picks.append((ticker, year, text, "table" if has_table else "text"))
     return picks
 
 
 def main(n: int, out: str, seed: int) -> None:
-    rng = random.Random(seed)  # fixed seed = same sample every run, so results are reproducible
+    rng = random.Random(seed)
     filings = load_filings()
     if not filings:
         raise SystemExit("No filings in data/raw/. Run `make ingest` first.")
 
-    # Sample extra passages, because some will be rejected below.
     candidates = sample_passages(filings, n * 2, rng)
 
     written = 0
-    with open(out, "a") as f:  # "a" = append, so you can run it several times to grow the set
+    with open(out, "a") as f:
         for ticker, year, text, source_type in candidates:
             if written >= n:
                 break
@@ -114,11 +100,10 @@ def main(n: int, out: str, seed: int) -> None:
                 system=SYSTEM,
                 user=f"Company: {ticker}, fiscal year {year}\n\n<excerpt>\n{text}\n</excerpt>",
                 schema=Generated,
-                temperature=0.7,  # a bit of randomness gives more varied questions
+                temperature=0.7,
             )
             g = r.parsed
-            # Reject the question if Gemini said it's unusable, or if the "evidence" isn't really
-            # copied from the passage (the eval relies on finding that exact text later).
+            # The eval matches evidence text exactly, so it must be a verbatim quote.
             norm = lambda s: " ".join(s.split())
             if not g or not g.usable or norm(g.evidence) not in norm(text):
                 continue
@@ -127,12 +112,12 @@ def main(n: int, out: str, seed: int) -> None:
                 "question": g.question,
                 "ticker": ticker,
                 "year": year,
-                "gold_answer": g.answer,  # the "correct" answer the judge compares against
-                "gold_evidence": [g.evidence],  # text that must appear in retrieved chunks
+                "gold_answer": g.answer,
+                "gold_evidence": [g.evidence],
                 "answerable": True,
-                "source_type": source_type,  # "table" or "text"
+                "source_type": source_type,
             }) + "\n")
-            f.flush()  # save each question immediately, so a crash (e.g. credits run out) loses nothing
+            f.flush()
             written += 1
     print(f"wrote {written} questions to {out}")
 

@@ -1,11 +1,6 @@
-"""
-streamlit_app.py - the demo web page.
+"""Streamlit demo. Uses the same answer() path as the eval.
 
-Type a question about a company's 10-K, get an answer with clickable sources showing the
-exact filing text it came from. It calls the same `answer()` function the eval uses,
-so what you see here is exactly what the eval measured.
-
-Run it with:  make demo      (then open http://localhost:8501)
+Run with `make demo`.
 """
 
 import json
@@ -19,10 +14,10 @@ from filings.embed import embed_query
 from filings.guardrails import GuardrailError
 from filings.rerank import rerank_scores
 
-INDEX_DIR = Path("data/raw/index")  # saved by ingest.py: each company's 10-K download links
-MAX_QUESTIONS_PER_SESSION = 20  # guardrail: caps API spend if the page is shared publicly
+MANIFEST = Path("filings.json")
+MAX_QUESTIONS_PER_SESSION = 20  # caps API spend if the page is shared
 
-# Questions the system answers correctly in the eval (a mix of tables and text).
+# Taken from the eval set, all answered correctly there.
 EXAMPLES = [
     "What were Microsoft's U.S. and foreign income before income taxes in fiscal year 2025?",
     "What was ExxonMobil's total oil-equivalent production per day in 2025?",
@@ -35,7 +30,7 @@ st.set_page_config(page_title="Ask the Filings", layout="centered")
 
 @st.cache_resource(show_spinner="Loading search models (first time only)...")
 def warm_up() -> list[str]:
-    """Load the embedding + reranker models once, and list the companies in the database."""
+    """Load both models up front and list the companies in the database."""
     embed_query("warm up")
     rerank_scores("warm up", ["warm up"])
     with connect() as conn:
@@ -44,19 +39,14 @@ def warm_up() -> list[str]:
 
 
 def filing_url(ticker: str, year: int) -> str | None:
-    """Link to the original 10-K on the SEC website, if ingest.py saved it."""
-    path = INDEX_DIR / f"{ticker}_10k.json"
-    if not path.exists():
-        return None
-    for f in json.loads(path.read_text()):
-        if f["fiscal_year"] == year:
+    for f in json.loads(MANIFEST.read_text()):
+        if f["ticker"] == ticker and f["fiscal_year"] == year:
             return f["url"]
     return None
 
 
 tickers = warm_up()
 
-# ---------------- page header ----------------
 st.title("Ask the Filings")
 st.caption(
     f"Ask questions about the annual reports (10-K filings) of {len(tickers)} US companies: "
@@ -64,9 +54,8 @@ st.caption(
     "and the system says so when the filings don't contain the answer."
 )
 
-# ---------------- inputs ----------------
 def use_example(text: str) -> None:
-    # Runs before the page redraws, so the question box shows the example straight away.
+    # Callbacks run before the rerun, so the text area picks up the new value.
     st.session_state.question = text
 
 
@@ -75,7 +64,6 @@ cols = st.columns(2)
 for i, ex in enumerate(EXAMPLES):
     cols[i % 2].button(ex, key=f"ex{i}", width="stretch", on_click=use_example, args=(ex,))
 
-# A form groups the inputs: nothing runs until "Ask" is pressed.
 with st.form("ask_form"):
     question = st.text_area("Your question", key="question", height=80,
                             placeholder="e.g. What was Microsoft's total revenue in fiscal 2025?")
@@ -88,7 +76,6 @@ if ask and not question.strip():
 
 st.session_state.setdefault("asked", 0)
 
-# ---------------- answer ----------------
 if ask:
     if st.session_state.asked >= MAX_QUESTIONS_PER_SESSION:
         st.error(f"This demo allows {MAX_QUESTIONS_PER_SESSION} questions per session.")
@@ -109,9 +96,8 @@ if ask:
             st.warning(f"Check these figures: {nums} could not be found in the cited passages "
                        "(they may be calculated or rounded).")
     elif a.request_type != "filing_question":
-        st.info(a.answer)  # advice, predictions, off-topic: a polite fixed refusal
+        st.info(a.answer)
     else:
-        # The system refused to guess: show that clearly, it's a feature, not an error.
         st.warning(f"**Not found in the filings.** {a.answer}")
 
     st.caption(
@@ -119,7 +105,6 @@ if ask:
         f"model {a.meta['model']}"
     )
 
-    # Sources the answer cited, in the order Gemini cited them.
     by_id = {h.id: h for h in a.hits}
     cited = [by_id[c] for c in a.citations if c in by_id]
     if cited:
@@ -127,12 +112,11 @@ if ask:
         for n, h in enumerate(cited, start=1):
             label = f"[{n}] {h.ticker} · 10-K FY{h.fiscal_year} · {h.section or 'section unknown'}"
             with st.expander(label, expanded=(n == 1)):
-                st.text(h.text)  # st.text keeps table rows ("label | value") on their own lines
+                st.text(h.text)  # keeps table rows on separate lines
                 url = filing_url(h.ticker, h.fiscal_year)
                 if url:
                     st.markdown(f"[Open the full filing on SEC EDGAR]({url})")
 
-    # Everything retrieved, for transparency: shows what the model was given to read.
     others = [h for h in a.hits if h.id not in a.citations]
     if others and a.request_type == "filing_question":
         with st.expander(f"Other passages retrieved but not cited ({len(others)})"):

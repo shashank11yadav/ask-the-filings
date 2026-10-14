@@ -1,14 +1,9 @@
-"""
-Tests for the small helper functions used by the eval and by hybrid search.
-These run offline: no database, no Gemini key needed.
-"""
-
 import sys
 from pathlib import Path
 
 import pytest
 
-# run_eval.py lives in evals/, which isn't a package, so add that folder to Python's import path.
+# evals/ is not a package
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evals"))
 
 import run_eval

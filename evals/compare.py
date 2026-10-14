@@ -1,19 +1,10 @@
-"""
-compare.py - is config B really better than config A, or is the difference just luck?
+"""Paired comparison of two run_eval.py result files.
 
-With a small eval set (e.g. 60 questions) a single score is uncertain by roughly ±10 points,
-so "0.82 -> 0.90" alone proves little. This script compares two per-question result files
-from run_eval.py QUESTION BY QUESTION:
+Reports the questions each config got that the other missed, an exact McNemar test on those
+disagreements, and a bootstrap 95% CI for the difference in recall. With ~100 questions a single
+score is uncertain by several points, so a raw difference on its own proves little.
 
-  - "B wins"  : questions B got right and A got wrong
-  - "A wins"  : the opposite
-  - McNemar exact test: only those disagreements carry information. If B's wins vs. A's wins
-    could easily happen by coin-flip, p is large. p < 0.05 is the usual bar for "real".
-  - 95% bootstrap confidence interval for the difference in recall (resample questions
-    10,000 times). If the interval excludes 0, the improvement is probably real.
-
-Usage:
-  uv run python evals/compare.py evals/results/<run A>/rerank_k8.jsonl evals/results/<run B>/rerank_k8.jsonl
+    uv run python evals/compare.py <run A>.jsonl <run B>.jsonl [--type table|text]
 """
 
 import argparse
@@ -24,10 +15,7 @@ from pathlib import Path
 
 
 def load(path: str, source_type: str | None = None) -> dict[str, bool]:
-    """Map question id -> whether retrieval found the evidence ("hit"). Answerable questions only.
-
-    source_type="table" or "text" keeps only that kind of question.
-    """
+    """Question id -> retrieval hit, for answerable questions (optionally one source_type)."""
     rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
     return {
         r["id"]: bool(r["hit"])
@@ -42,7 +30,6 @@ def mcnemar_exact(b_wins: int, a_wins: int) -> float:
     if n == 0:
         return 1.0
     k = min(b_wins, a_wins)
-    # Probability of a split at least this lopsided if each disagreement were a fair coin flip.
     p = sum(comb(n, i) for i in range(k + 1)) / 2**n
     return min(1.0, 2 * p)
 
@@ -67,7 +54,7 @@ def main() -> None:
     args = p.parse_args()
 
     A, B = load(args.a, args.type), load(args.b, args.type)
-    ids = sorted(A.keys() & B.keys())  # only questions present in both runs
+    ids = sorted(A.keys() & B.keys())
     a = [A[i] for i in ids]
     b = [B[i] for i in ids]
     b_wins = sum(bi and not ai for ai, bi in zip(a, b))

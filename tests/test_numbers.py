@@ -1,5 +1,3 @@
-"""Tests for numbers.py: extracting numbers from filing text and matching them."""
-
 from filings.numbers import extract_numbers, numbers_match, same_number, unsupported_numbers
 
 

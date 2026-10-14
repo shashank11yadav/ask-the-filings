@@ -115,11 +115,17 @@ Needs Python 3.11+, [uv](https://docs.astral.sh/uv/) and Docker.
 make setup     # installs dependencies and creates a blank .env
                # then fill in GEMINI_API_KEY and SEC_USER_AGENT in .env
 make db        # Postgres + pgvector in Docker
-make ingest    # downloads 10 companies x 2 years of 10-Ks (re-runs skip what's already loaded)
+make ingest    # downloads the 20 filings pinned in filings.json, then chunks and embeds them
 make demo      # web page at http://localhost:8501
 ```
 
 The demo page shows the answer, the cited passages, and a link to the original filing on EDGAR.
+
+`filings.json` pins the exact filings (accession numbers) the eval questions were written
+against, so a fresh clone loads the same documents even after companies file newer 10-Ks. Each
+entry also stores a hash of the extracted text, and ingest stops if a download doesn't match.
+The hash covers the text rather than the raw HTML because EDGAR adds a script tag with a random
+path to every response. `make ingest ARGS="--latest --years 2"` loads the newest filings instead.
 
 ## Eval
 
@@ -184,7 +190,8 @@ and a bootstrap confidence interval over the per-question results.
 
 | Path | What it does |
 |---|---|
-| `src/filings/ingest.py` | Downloads 10-Ks from EDGAR, chunks, embeds and stores them |
+| `filings.json` | The pinned filings: URL, accession number and text hash for each |
+| `src/filings/ingest.py` | Downloads the pinned 10-Ks, checks them, chunks, embeds and stores them |
 | `src/filings/chunking.py` | HTML to text, table flattening, the chunkers |
 | `src/filings/embed.py`, `rerank.py` | Local embedding model and cross-encoder reranker |
 | `src/filings/retrieve.py` | Embedding, keyword, hybrid and reranked search |

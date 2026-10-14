@@ -1,5 +1,3 @@
-"""Tests for query_parse.py: detecting company and year from a question."""
-
 from filings.query_parse import parse_query
 
 

@@ -1,13 +1,6 @@
-# Makefile - short commands for common tasks. Run e.g. `make ingest` from this folder.
-# (`uv run` runs a command inside this project's virtual environment.)
-
-# Companies and number of years to download. Override like: make ingest TICKERS="AAPL MSFT" YEARS=1
-TICKERS ?= AAPL MSFT NVDA AMZN GOOGL JPM XOM UNH WMT TSLA
-YEARS ?= 2
-
 .PHONY: setup db ingest questions check-questions eval eval-retrieval guardrails demo test lint
 
-# Install Python dependencies and create a blank .env to fill in (won't overwrite an existing one).
+# Install dependencies and create a blank .env if there isn't one.
 setup:
 	uv sync
 	@test -f .env || printf '%s\n' \
@@ -17,45 +10,42 @@ setup:
 		'ANSWER_MODEL=gemini-3.8-flash' 'JUDGE_MODEL=gemini-3.8-flash' > .env
 	@echo "Fill in GEMINI_API_KEY and SEC_USER_AGENT in .env"
 
-# Start Postgres+pgvector in Docker and create the table.
+# Postgres + pgvector in Docker.
 db:
 	docker compose up -d db
 	uv run python -m filings.db
 
-# Download, chunk, embed and store the 10-K filings. Already-loaded filings are skipped.
-# Extra options: make ingest ARGS=--force   (rebuild chunks, e.g. after changing chunk size)
-#                make ingest ARGS=--refresh (check the SEC for newer filings)
+# Load the filings pinned in filings.json. ARGS=--force rebuilds chunks;
+# ARGS="--latest --years 2" uses the newest 10-Ks instead.
 ingest:
-	uv run python -m filings.ingest $(TICKERS) --years $(YEARS) $(ARGS)
+	uv run python -m filings.ingest $(ARGS)
 
-# Draft more eval questions with Gemini (then run make check-questions).
+# Draft more eval questions with Gemini.
 questions:
 	uv run python evals/generate_questions.py --n 60
 
-# Automatic checks on the eval questions (no API calls).
+# Sanity checks on the eval questions (no API calls).
 check-questions:
 	uv run python evals/check_questions.py
 
-# Guardrail tests: advice, predictions, off-topic and prompt-injection cases. Uses Gemini credits.
+# Guardrail cases (uses the Gemini API).
 guardrails:
 	uv run python evals/run_guardrails.py
 
-# Free eval: search quality only, no Gemini calls.
+# Retrieval metrics only (no API calls).
 eval-retrieval:
 	uv run python evals/run_eval.py --retrieval-only
 
-# Full eval: answers + judge. Uses Gemini credits.
+# Answers and grading for the full question set (uses the Gemini API).
 eval:
 	uv run python evals/run_eval.py --modes rerank --no-filters
 
-# Start the demo web page at http://localhost:8501 (needs `make db` running and data ingested).
+# Demo at http://localhost:8501.
 demo:
 	uv run streamlit run app/streamlit_app.py
 
-# Run the unit tests.
 test:
 	uv run pytest -q
 
-# Check code style.
 lint:
 	uv run ruff check .

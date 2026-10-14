@@ -1,15 +1,7 @@
-"""
-chunking.py - turns a raw 10-K web page (HTML) into small pieces of text ("chunks").
+"""10-K HTML to plain text, split by Item, then cut into chunks.
 
-Why chunk? A 10-K is ~100 pages. We can't send all of it to the LLM for every question,
-so we cut it into ~400-word pieces, find the few pieces relevant to the question, and
-send only those.
-
-The pipeline is:  HTML  --html_to_text-->  clean text  --split_sections-->  sections  --chunk_text-->  chunks
-
-This "fixed 400-word windows" approach is a BASELINE. Trying other chunk sizes or smarter
-splitting and measuring the difference with the eval is exactly what makes this project
-stand out.
+chunk_text is the default (fixed word windows). chunk_by_tokens sizes chunks in model tokens and
+can keep tables together; it was evaluated but not adopted (see README).
 """
 
 import re
@@ -19,54 +11,44 @@ from dataclasses import dataclass
 
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
-# Modern 10-Ks are "inline XBRL": an HTML page that starts with an XML header. BeautifulSoup
-# sees that header and warns that we might want an XML parser. We don't: the content is
-# still a web page, and the HTML parser reads it correctly. So we silence that warning.
+# Inline XBRL filings start with an XML declaration, which makes BeautifulSoup suggest an XML
+# parser. The documents are HTML and parse correctly as HTML.
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
-# A 10-K is organised into "Items": Item 1 (Business), Item 1A (Risk Factors), Item 7 (MD&A)...
-# This regex spots a line that starts a new Item, e.g. "Item 1A. Risk Factors" or "ITEM 7 - ...".
+# Matches 10-K section headings such as "Item 1A. Risk Factors" or "ITEM 7 - MD&A".
 ITEM_RE = re.compile(r"^\s*item\s+(\d{1,2}[a-c]?)[\.\s:\-—–]", re.IGNORECASE)
 
-# Marker lines placed around each table by html_to_text (characters that never appear in filings).
+# Lines that html_to_text puts around each table, so the table-aware chunker can find them.
 TABLE_START = "⟦TABLE⟧"
 TABLE_END = "⟦/TABLE⟧"
 
 
 @dataclass
 class Chunk:
-    section: str | None  # e.g. "Item 7", or None for text before the first Item (cover page)
-    chunk_index: int  # 0, 1, 2, ... in order through the document
+    section: str | None  # None for the cover page, before the first Item
+    chunk_index: int
     text: str
 
 
 def html_to_text(html: str) -> str:
-    """Strip HTML tags and return readable plain text, one line per paragraph/table row."""
+    """Plain text with one line per paragraph and one "label | value | ..." line per table row."""
     soup = BeautifulSoup(html, "lxml")
-
-    # Remove things that aren't real content.
     for tag in soup(["script", "style"]):
         tag.decompose()
-    # SEC "inline XBRL" filings hide machine-readable metadata in <ix:header>; drop it.
-    for tag in soup.find_all(["ix:header"]):
+    for tag in soup.find_all(["ix:header"]):  # XBRL metadata, not document text
         tag.decompose()
 
-    # Tables are where the numbers live. If we just took the text, a number like "383,285"
-    # would get separated from its label "Net sales". So we rewrite each table row as
-    # "Net sales | 383,285" to keep labels and numbers together.
+    # Flatten each table row so values stay next to their row label after extraction.
     for table in soup.find_all("table"):
         rows = []
         for tr in table.find_all("tr"):
             cells = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
-            # Filings put "$" and "%" in their own cells; drop those noise cells.
+            # "$" and "%" usually sit in their own cells.
             cells = [c for c in cells if c and c not in {"$", "%", ")"}]
             if cells:
                 rows.append(" | ".join(cells))
-        # Wrap the rows in marker lines so the table-aware chunker knows where a table starts/ends.
-        # The other chunkers simply drop these marker lines.
         table.replace_with(f"\n{TABLE_START}\n" + "\n".join(rows) + f"\n{TABLE_END}\n")
 
-    # Get the text, collapse repeated spaces, drop empty lines.
     text = soup.get_text("\n")
     lines = [re.sub(r"\s+", " ", ln).strip() for ln in text.splitlines()]
     return "\n".join(ln for ln in lines if ln)
@@ -77,24 +59,19 @@ def _strip_markers(text: str) -> str:
 
 
 def split_sections(text: str) -> list[tuple[str | None, str]]:
-    """Split the document at each "Item X." heading. Returns [(section_name, section_text), ...]."""
-    sections: list[tuple[str | None, list[str]]] = [(None, [])]  # start with the cover page
+    """Split at each Item heading. Returns [(section_name, section_text), ...]."""
+    sections: list[tuple[str | None, list[str]]] = [(None, [])]
     for line in text.splitlines():
         m = ITEM_RE.match(line)
-        # Headings are short; a long line starting with "Item" is probably a sentence, not a heading.
-        if m and len(line) < 200:
+        if m and len(line) < 200:  # longer lines are sentences that happen to start with "Item"
             sections.append((f"Item {m.group(1).upper()}", [line]))
         else:
-            sections[-1][1].append(line)  # add the line to the current section
+            sections[-1][1].append(line)
     return [(name, "\n".join(lines)) for name, lines in sections if lines]
 
 
 def chunk_text(text: str, size: int = 400, overlap: int = 60) -> list[Chunk]:
-    """Cut each section into windows of `size` words.
-
-    Consecutive chunks share `overlap` words, so a sentence that falls on a boundary
-    still appears whole in at least one chunk. A chunk never spans two sections.
-    """
+    """Windows of `size` words overlapping by `overlap`, never crossing a section boundary."""
     if overlap >= size:
         raise ValueError("overlap must be smaller than size")
     chunks: list[Chunk] = []
@@ -105,40 +82,27 @@ def chunk_text(text: str, size: int = 400, overlap: int = 60) -> list[Chunk]:
             window = words[start : start + size]
             chunks.append(Chunk(section, len(chunks), " ".join(window)))
             if start + size >= len(words):
-                break  # reached the end of this section
-            start += size - overlap  # step forward, keeping `overlap` words
+                break
+            start += size - overlap
     return chunks
 
 
-# ---------------------------------------------------------------------------------------------
-# Token-based chunking (optionally table-aware)
-#
-# Why tokens instead of words: the embedding model and the reranker only read the first 512
-# TOKENS of a chunk. Financial tables are token-heavy ("1,234.5" is several tokens), so a
-# 400-word chunk is often 550-900 tokens and its tail was invisible to them. Sizing chunks
-# in tokens guarantees the models see the whole chunk.
-#
-# Table-aware mode additionally:
-#   - keeps a table in one chunk whenever it fits (instead of cutting it at a random row)
-#   - when a table is too big, splits it by rows and repeats the table's caption (the
-#     sentence just before it) and header row at the top of every piece, so a piece like
-#     "Derivatives CVA | 2 | (14)" still says which years/units the columns are.
-# ---------------------------------------------------------------------------------------------
+# Token-based chunking. The embedder and reranker truncate at 512 tokens, and number-heavy
+# tables make about half of the 400-word chunks longer than that.
 
 CountFn = Callable[[str], int]
 
 
 def _blocks(body: str) -> list[tuple[str, str | None, list[str]]]:
-    """Group a section's lines into blocks: ("line", None, [line]) or ("table", caption, rows)."""
+    """Group lines into ("line", None, [line]) and ("table", caption, rows) blocks."""
     blocks: list[tuple[str, str | None, list[str]]] = []
-    rows: list[str] | None = None  # not None while we're inside a table
+    rows: list[str] | None = None
     for line in body.splitlines():
         if line == TABLE_START:
             rows = []
         elif line == TABLE_END:
             if rows:
-                # The caption is the prose line right before the table, e.g. "The following table
-                # presents net sales by category". Only used if it's short.
+                # Use the preceding line as the caption ("The following table presents...").
                 prev = blocks[-1] if blocks and blocks[-1][0] == "line" else None
                 caption = prev[2][0] if prev and len(prev[2][0].split()) <= 60 else None
                 blocks.append(("table", caption, rows))
@@ -147,29 +111,29 @@ def _blocks(body: str) -> list[tuple[str, str | None, list[str]]]:
             rows.append(line)
         else:
             blocks.append(("line", None, [line]))
-    if rows:  # a table whose end marker landed in the next section
+    if rows:  # table end marker fell into the next section
         blocks.append(("table", None, rows))
     return blocks
 
 
 def _split_long(line: str, max_tokens: int, count: CountFn) -> list[str]:
-    """Split a single line that is longer than max_tokens into word windows that fit."""
+    """Split one over-long line into word windows that fit."""
     n = count(line)
     if n <= max_tokens:
         return [line]
     words = line.split()
-    per_window = max(1, int(len(words) * max_tokens / n * 0.9))  # 0.9 = safety margin
+    per_window = max(1, int(len(words) * max_tokens / n * 0.9))
     return [" ".join(words[i : i + per_window]) for i in range(0, len(words), per_window)]
 
 
 def chunk_by_tokens(
     text: str, max_tokens: int, overlap_tokens: int, count: CountFn, tables: bool = True
 ) -> list[Chunk]:
-    """Pack whole lines into chunks of at most `max_tokens` (as measured by `count`).
+    """Pack whole lines into chunks of at most `max_tokens`.
 
-    Lines are never cut unless a single line is itself too long. Consecutive prose chunks
-    share about `overlap_tokens` of lines. With tables=True, tables are handled as described
-    above; with tables=False, table rows are treated like ordinary lines.
+    With tables=True, a table that fits is kept in one chunk, and a larger one is split by rows
+    with its caption and header row repeated on every piece. With tables=False, table rows are
+    packed like any other line.
     """
     chunks: list[Chunk] = []
     for section, body in split_sections(text):
@@ -181,9 +145,8 @@ def chunk_by_tokens(
 def _pack_section(
     body: str, max_tokens: int, overlap_tokens: int, count: CountFn, tables: bool
 ) -> list[str]:
-    """Do the packing for ONE section and return the chunk texts (see chunk_by_tokens)."""
-    out: list[str] = []  # finished chunk texts
-    cur: list[str] = []  # lines in the chunk being built
+    out: list[str] = []
+    cur: list[str] = []
     cur_tokens = 0
 
     def emit() -> None:
@@ -191,7 +154,6 @@ def _pack_section(
             out.append("\n".join(cur))
 
     def start_new(keep_overlap: bool) -> None:
-        """Close the current chunk and start a new one, optionally seeded with its last lines."""
         nonlocal cur, cur_tokens
         emit()
         tail: list[str] = []
@@ -210,7 +172,7 @@ def _pack_section(
             t = count(piece)
             if cur and cur_tokens + t > max_tokens:
                 start_new(keep_overlap=True)
-                if cur_tokens + t > max_tokens:  # overlap + piece still too big: drop overlap
+                if cur_tokens + t > max_tokens:
                     start_new(keep_overlap=False)
             cur.append(piece)
             cur_tokens += t
@@ -221,21 +183,19 @@ def _pack_section(
                 add_line(ln)
             continue
 
-        # --- a table ---
         table_tokens = sum(count(r) for r in lines)
         if cur_tokens + table_tokens <= max_tokens:
-            cur.extend(lines)  # fits in the current chunk: keep it whole, right after its caption
+            cur.extend(lines)
             cur_tokens += table_tokens
             continue
 
         start_new(keep_overlap=False)
         prefix = [caption] if caption else []
         if sum(count(p) for p in prefix) + table_tokens <= max_tokens:
-            for ln in prefix + lines:  # fits in a fresh chunk: keep it whole there
+            for ln in prefix + lines:
                 add_line(ln)
             continue
 
-        # Too big for one chunk: split by rows, repeating caption + header row on each piece.
         header = prefix + lines[:1]
         if sum(count(h) for h in header) > max_tokens // 2:
             header = lines[:1] if count(lines[0]) <= max_tokens // 2 else []
@@ -249,7 +209,6 @@ def _pack_section(
                     cur, cur_tokens = list(header), header_tokens
                 cur.append(piece)
                 cur_tokens += t
-        # Leave the last table piece open; following prose continues in it if it fits.
 
     emit()
     return out
