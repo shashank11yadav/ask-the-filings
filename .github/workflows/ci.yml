@@ -1,0 +1,15 @@
+# GitHub Actions: every time you push code, GitHub runs lint + unit tests automatically.
+# A green check mark on your repo tells reviewers the code is maintained.
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # download the repo
+      - uses: astral-sh/setup-uv@v5 # install uv
+      - run: uv sync # install dependencies
+      - run: uv run ruff check . # style check
+      - run: uv run pytest -q # unit tests (no API key or database needed)

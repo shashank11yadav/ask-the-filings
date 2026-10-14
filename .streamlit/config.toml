@@ -1,0 +1,6 @@
+[server]
+# Don't watch library files for changes (avoids noisy warnings from transformers on startup).
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
