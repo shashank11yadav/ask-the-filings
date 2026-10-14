@@ -5,7 +5,7 @@
 TICKERS ?= AAPL MSFT NVDA AMZN GOOGL JPM XOM UNH WMT TSLA
 YEARS ?= 2
 
-.PHONY: setup db ingest questions eval eval-retrieval serve demo test lint
+.PHONY: setup db ingest questions eval eval-retrieval demo test lint
 
 # Install Python dependencies and create a blank .env to fill in (won't overwrite an existing one).
 setup:
@@ -39,10 +39,6 @@ eval-retrieval:
 # Full eval: answers + judge. Uses Gemini credits.
 eval:
 	uv run python evals/run_eval.py
-
-# Start the web API at http://127.0.0.1:8000 (auto-reloads when you edit code).
-serve:
-	uv run uvicorn filings.api:app --reload
 
 # Start the demo web page at http://localhost:8501 (needs `make db` running and data ingested).
 demo:

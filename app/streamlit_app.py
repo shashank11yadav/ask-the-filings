@@ -2,7 +2,7 @@
 streamlit_app.py - the demo web page.
 
 Type a question about a company's 10-K, get an answer with clickable sources showing the
-exact filing text it came from. It calls the same `answer()` function the API and evals use,
+exact filing text it came from. It calls the same `answer()` function the eval uses,
 so what you see here is exactly what the eval measured.
 
 Run it with:  make demo      (then open http://localhost:8501)
@@ -20,7 +20,7 @@ from filings.rerank import rerank_scores
 
 INDEX_DIR = Path("data/raw/index")  # saved by ingest.py: each company's 10-K download links
 
-# Questions from the eval set that the system answered correctly (a mix of tables and text).
+# Questions the system answers correctly in the eval (a mix of tables and text).
 EXAMPLES = [
     "What were Microsoft's U.S. and foreign income before income taxes in fiscal year 2025?",
     "What was ExxonMobil's total oil-equivalent production per day in 2025?",
@@ -128,6 +128,6 @@ if ask:
 st.divider()
 st.caption(
     "Hybrid search (embeddings + keywords), cross-encoder reranking, then Gemini with a JSON schema. "
-    "Evaluated on 60 questions: 95% correct, 0 confident wrong answers. "
+    "Evaluated on 121 questions: 95% correct, 0 confident wrong answers. "
     "Not financial advice."
 )
