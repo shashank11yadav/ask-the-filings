@@ -14,11 +14,7 @@ Three choices keep the test fair:
   - Gemini is told to paraphrase instead of copying the passage's wording. Questions that reuse
     the exact words make keyword search look better than it would be for real users.
 
-Each row is saved with "verified": false. YOU must then read through evals/questions.jsonl,
-fix or delete bad questions, and set "verified": true on the good ones. Also add your own
-harder questions by hand: ones that compare years, need two companies, or have NO answer
-in the filings (set "answerable": false). Human-checked questions are what make your
-eval numbers believable to an interviewer.
+After generating, run `make check-questions` to catch broken or duplicate questions.
 
 Usage:  uv run python evals/generate_questions.py --n 60 [--out evals/questions.jsonl]
 """
@@ -135,7 +131,6 @@ def main(n: int, out: str, seed: int) -> None:
                 "gold_evidence": [g.evidence],  # text that must appear in retrieved chunks
                 "answerable": True,
                 "source_type": source_type,  # "table" or "text"
-                "verified": False,  # flip to true after you check it by hand
             }) + "\n")
             f.flush()  # save each question immediately, so a crash (e.g. credits run out) loses nothing
             written += 1

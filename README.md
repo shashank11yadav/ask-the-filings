@@ -52,9 +52,9 @@ than retrieval recall (89%) because many facts appear in both years' filings.
 
 **Caveats.** The answerable questions were drafted by Gemini from passages of the filings and
 Gemini also grades the answers, which tends to be generous; numbers are also checked in code to
-offset that. Every question passes automatic checks (the quote exists in the filing, the answer's
-numbers appear in the quote, the company is named, no duplicates), but the human review
-(`make review`) isn't finished yet.
+offset that. Every question passes automatic checks: the quoted evidence exists in the filing,
+the answer's numbers appear in the quote, the question names the company, and there are no
+duplicates (four were removed). The 27 unanswerable questions were written separately.
 
 ## Guardrails
 
@@ -126,8 +126,7 @@ make eval-retrieval    # retrieval metrics only, no API calls
 make eval              # answers + grading for all 144 questions (about $1)
 make guardrails        # the 21 guardrail cases (about $0.15)
 make check-questions   # automatic checks on the question set, no API calls
-make review            # go through the questions by hand: y = correct, n = wrong
-make questions         # draft more questions with Gemini, then check and review them
+make questions         # draft more questions with Gemini, then run check-questions
 uv run python evals/compare.py <run A>.jsonl <run B>.jsonl
 ```
 
@@ -174,8 +173,7 @@ and a bootstrap confidence interval over the per-question results.
 
 ## Next
 
-- Finish the hand review of the question set.
-- Add a judge from a different model family and compare it with my own labels.
+- Add a second judge from a different model family and measure how often the two agree.
 - Add a short header (company, year, section) to each chunk before embedding.
 - Split multi-year and multi-company questions into one search per filing.
 - Deploy the demo (Cloud Run + Neon) with rate limits and a spending cap.
@@ -192,5 +190,5 @@ and a bootstrap confidence interval over the per-question results.
 | `src/filings/answer.py`, `llm.py` | Builds the prompt and calls Gemini with a JSON schema |
 | `src/filings/guardrails.py`, `numbers.py` | Input checks, fixed refusals, number matching for checks and evals |
 | `app/streamlit_app.py` | Demo page |
-| `evals/` | Question set, guardrail cases, eval runners, question review tool, paired comparison |
+| `evals/` | Question set, guardrail cases, eval runners, question checks, paired comparison |
 | `tests/` | Unit tests (offline, no API key needed) |

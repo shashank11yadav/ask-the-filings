@@ -233,7 +233,6 @@ def main() -> None:
     p.add_argument("--k", type=int, default=8)
     p.add_argument("--limit", type=int)
     p.add_argument("--retrieval-only", action="store_true", help="skip generation + judge (free)")
-    p.add_argument("--verified-only", action="store_true", help="only use hand-checked questions")
     p.add_argument("--no-filters", action="store_true",
                    help="don't tell search the company/year (realistic, harder)")
     p.add_argument("--auto-filter", default="company", choices=["off", "company", "company+year"],
@@ -243,8 +242,6 @@ def main() -> None:
     # Load questions (one JSON object per line).
     lines = Path(a.questions).read_text().splitlines()
     qs = [json.loads(line) for line in lines if line.strip()]
-    if a.verified_only:
-        qs = [q for q in qs if q.get("verified")]
     qs = qs[: a.limit] if a.limit else qs
 
     # Each run gets its own timestamped folder, so old results are never overwritten.

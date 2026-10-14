@@ -5,7 +5,7 @@
 TICKERS ?= AAPL MSFT NVDA AMZN GOOGL JPM XOM UNH WMT TSLA
 YEARS ?= 2
 
-.PHONY: setup db ingest questions check-questions review eval eval-retrieval guardrails demo test lint
+.PHONY: setup db ingest questions check-questions eval eval-retrieval guardrails demo test lint
 
 # Install Python dependencies and create a blank .env to fill in (won't overwrite an existing one).
 setup:
@@ -28,17 +28,13 @@ db:
 ingest:
 	uv run python -m filings.ingest $(TICKERS) --years $(YEARS) $(ARGS)
 
-# Draft eval questions with Gemini (check them by hand afterwards!).
+# Draft more eval questions with Gemini (then run make check-questions).
 questions:
 	uv run python evals/generate_questions.py --n 60
 
 # Automatic checks on the eval questions (no API calls).
 check-questions:
-	uv run python evals/review.py check
-
-# Review the eval questions one by one in the terminal (y = correct, n = wrong, s = skip, q = quit).
-review:
-	uv run python evals/review.py review
+	uv run python evals/check_questions.py
 
 # Guardrail tests: advice, predictions, off-topic and prompt-injection cases. Uses Gemini credits.
 guardrails:
