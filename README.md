@@ -6,6 +6,8 @@ passages it came from. If the filings don't contain the answer, it says so inste
 I built this to learn how to make a retrieval system that is measurably good, not just one that
 demos well. Every design choice below was kept or dropped based on the eval.
 
+https://github.com/user-attachments/assets/64ae15e5-2de7-44b7-a403-27f4e7530134
+
 ## Results
 
 144 questions over 10 companies' 10-Ks (two fiscal years each): 117 that the filings answer and 27
