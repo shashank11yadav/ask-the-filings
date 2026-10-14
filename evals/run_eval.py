@@ -12,7 +12,11 @@ What each metric means:
                 Checked by matching text, not chunk ids, so it still works after you change chunk sizes.
 - correct     : Does the answer match the gold answer? A second Gemini call (the "judge") decides.
 - faithful    : Is every claim in the answer backed by the chunks it cited? (Catches made-up facts.)
+- numeric_ok  : For answers with numbers, does the system's answer contain the gold number(s)?
+                Checked in code (numbers.py), not by the judge. Abstaining counts as wrong.
+- grounded    : Of the answers given, how many contain only numbers found in their cited passages?
 - abstain_acc : For questions with NO answer in the filings, how often did the system correctly say so?
+- over_refusal: For questions that DO have an answer, how often did the system wrongly refuse?
 - p50_s/p95_s : Typical and worst-case (95th percentile) response time in seconds.
 - usd_per_q   : Average API cost per question, including the judge.
 
@@ -34,6 +38,7 @@ from pydantic import BaseModel
 from filings import llm
 from filings.answer import answer, format_context
 from filings.config import settings
+from filings.numbers import numbers_match
 from filings.retrieve import search
 
 # Price per 1 million tokens in USD: (input, output). Output includes "thinking" tokens.
@@ -150,11 +155,18 @@ def run(questions: list[dict], mode: str, k: int, retrieval_only: bool, out_dir:
         # --- Full mode: retrieve + answer with Gemini ---
         a = answer(q["question"], k=k, mode=mode, ticker=ticker, year=year)
         row = {"id": q["id"], "answerable": q["answerable"], "source_type": q.get("source_type"),
+               "category": q.get("category"), "request_type": a.request_type,
+               "unsupported_numbers": a.unsupported_numbers,
                "pred_answerable": a.answerable,
                "answer": a.answer, "citations": a.citations, "latency": a.latency_s,
                "hit": evidence_hit(q.get("gold_evidence", []), [h.text for h in a.hits]),
                "rr": reciprocal_rank(q.get("gold_evidence", []), [h.text for h in a.hits]),
                "cost": cost(a.meta["model"], a.input_tokens, a.output_tokens)}
+
+        # Numeric check in code: does the answer contain the gold number(s)? (None = no numbers)
+        if q["answerable"]:
+            match = numbers_match(q["gold_answer"], a.answer)
+            row["numeric_ok"] = None if match is None else (match and a.answerable)
 
         # Only judge when there IS a gold answer and the system attempted an answer.
         if q["answerable"] and a.answerable:
@@ -195,7 +207,10 @@ def run(questions: list[dict], mode: str, k: int, retrieval_only: bool, out_dir:
         # If the system wrongly said "can't answer" on an answerable question, that counts as incorrect.
         "correct": mean([r.get("correct", False) for r in ans]) if not retrieval_only else None,
         "faithful": mean([r["faithful"] for r in judged]) if judged else None,
+        "numeric_ok": mean([r["numeric_ok"] for r in ans if r.get("numeric_ok") is not None]) if not retrieval_only else None,
+        "grounded": mean([not r["unsupported_numbers"] for r in rows if r.get("pred_answerable")]) if not retrieval_only else None,
         "abstain_acc": mean([not r.get("pred_answerable", True) for r in unans]) if unans and not retrieval_only else None,
+        "over_refusal": mean([not r.get("pred_answerable", True) for r in ans]) if not retrieval_only else None,
         "p50_s": statistics.median(lat) if lat else 0.0,
         "p95_s": pct(lat, 0.95),
         "usd_per_q": mean([r["cost"] for r in rows]),
@@ -243,6 +258,18 @@ def main() -> None:
     table += "\n".join("| " + " | ".join(fmt(r[c]) for c in cols) + " |" for r in results)
     cov = evidence_coverage(qs)
     table += f"\n\nevidence coverage (ceiling on recall): {cov:.3f}"
+
+    # For unanswerable questions: how often each kind was correctly refused (full runs only).
+    if not a.retrieval_only and any(not q["answerable"] for q in qs):
+        for path in sorted(out_dir.glob("*.jsonl")):
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            by_cat: dict[str, list[bool]] = {}
+            for r in rows:
+                if not r["answerable"]:
+                    by_cat.setdefault(r["category"], []).append(not r["pred_answerable"])
+            table += f"\n\nrefused unanswerable questions ({path.stem}):"
+            for cat, refused in sorted(by_cat.items()):
+                table += f"\n  {cat}: {sum(refused)}/{len(refused)}"
     print(table)
     (out_dir / "summary.md").write_text(table + "\n")
     print(f"\nper-question results in {out_dir}/")

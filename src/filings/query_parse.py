@@ -19,11 +19,11 @@ from dataclasses import dataclass
 # Matching is case-insensitive and on whole words, so "Apple" won't match "pineapple".
 ALIASES: dict[str, list[str]] = {
     "AAPL": ["apple"],
-    "MSFT": ["microsoft"],
+    "MSFT": ["microsoft", "linkedin"],
     "NVDA": ["nvidia"],
     "AMZN": ["amazon", "aws"],
     "GOOGL": ["alphabet", "google", "youtube"],
-    "JPM": ["jpmorgan", "jp morgan", "jpmorgan chase", "chase"],
+    "JPM": ["jpmorgan", "jp morgan", "jpmorgan chase", "jpmorganchase", "chase"],
     "XOM": ["exxon", "exxonmobil", "exxon mobil"],
     "UNH": ["unitedhealth", "united health", "unitedhealthcare", "optum"],
     "WMT": ["walmart", "wal-mart", "sam's club"],

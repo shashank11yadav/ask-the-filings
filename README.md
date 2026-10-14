@@ -8,38 +8,71 @@ demos well. Every design choice below was kept or dropped based on the eval.
 
 ## Results
 
-121 questions over 10 companies' 10-Ks (two fiscal years each). The question doesn't say which
-company or year to search; the system works that out itself.
+144 questions over 10 companies' 10-Ks (two fiscal years each): 117 that the filings answer and 27
+that they don't. The question doesn't say which company or year to search; the system works that
+out itself.
 
 | | |
 |---|---|
-| **Correct answers** | **115 / 121 (95%)**, 95% CI roughly 90-98% |
-| Confident wrong answers | **0**. The other 6 were "not found in the excerpts" replies |
-| Answers supported by their cited passages | 115 / 115 |
-| Table questions / text questions correct | 91 / 96 and 24 / 25 |
-| Cost per question | $0.008 (answer + grading, `gemini-3.8-flash`) |
-| Latency | 5.6 s median, 9.5 s p95 |
+| **Correct answers** | **111 / 117 (95%)**, 95% CI roughly 89-98% |
+| Wrong answers | **0**. The other 6 were "not found in the retrieved passages" replies |
+| Main figure correct, checked in code | 65 / 67 numeric questions (the 2 misses are refusals) |
+| Answers whose numbers all appear in the cited passages | 112 / 112 |
+| Unanswerable questions correctly refused | 26 / 27 |
+| Guardrail tests passed | 21 / 21 |
+| Cost per question | $0.007 (answer + grading, `gemini-3.8-flash`) |
+| Latency | 5.5 s median, 8.7 s p95 |
 
-Correct answers (95%) come out higher than retrieval recall (88%) because many facts appear in
-both years' filings, so the answer can come from a passage other than the one the question was
-written from.
+Unanswerable questions by type, all refused except one:
+
+| Type | Example | Refused |
+|---|---|---|
+| Company not loaded | "What was Intel's gross margin in 2025?" | 6 / 6 |
+| Year not loaded | "What was Apple's total net sales in fiscal 2015?" | 6 / 6 |
+| Prediction | "What will NVIDIA's total revenue be in fiscal 2030?" | 5 / 5 |
+| Not disclosed | "How many iPhone units did Apple sell in fiscal 2025?" | 4 / 4 |
+| False premise | "Why did Apple discontinue the iPhone in fiscal 2025?" | 5 / 6 |
+
+The one false-premise "miss" answered that the premise is wrong and quoted iPhone sales growing 4%
+to $209.6 billion. I count it as a miss to keep the metric strict.
 
 How much each part of the search contributes (did the right passage make the top 8?):
 
 | Search | Company/year given | Realistic: company detected from the question |
 |---|---|---|
-| Embeddings only | 0.69 | 0.60 |
-| Keywords only (Postgres full-text) | 0.82 | 0.67 |
-| Hybrid (both, merged with RRF) | 0.81 | 0.74 |
-| **Hybrid + reranker (default)** | **0.89** | **0.88** |
+| Embeddings only | 0.68 | 0.60 |
+| Keywords only (Postgres full-text) | 0.82 | 0.68 |
+| Hybrid (both, merged with RRF) | 0.80 | 0.74 |
+| **Hybrid + reranker (default)** | **0.90** | **0.89** |
 | Hybrid + reranker, no company detection | | 0.77 |
 
-On this question set, keyword search beats the embedding model (bge-small doesn't handle
-numbers and line items well), and the cross-encoder reranker does most of the work.
+Keyword search beats the embedding model here (bge-small doesn't handle numbers and line items
+well), and the cross-encoder reranker does most of the work. Correct answers (95%) come out higher
+than retrieval recall (89%) because many facts appear in both years' filings.
 
-**Caveats.** The questions were drafted by Gemini from passages of the filings, and Gemini also
-grades the answers, which tends to be generous. I haven't hand-checked every question yet, and the
-set has no unanswerable questions, so wrong refusals aren't measured.
+**Caveats.** The answerable questions were drafted by Gemini from passages of the filings and
+Gemini also grades the answers, which tends to be generous; numbers are also checked in code to
+offset that. Every question passes automatic checks (the quote exists in the filing, the answer's
+numbers appear in the quote, the company is named, no duplicates), but the human review
+(`make review`) isn't finished yet.
+
+## Guardrails
+
+| Where | What it does |
+|---|---|
+| Before the model | Rejects empty questions and questions over 500 characters |
+| In the prompt | Retrieved filing text is marked as data, never instructions |
+| Model output | Each request is labelled as a filing question, investment advice, a prediction or off-topic; anything but a filing question gets a fixed refusal written in code, not by the model |
+| After the model | An answer without a valid citation is withheld; numbers not found in the cited passages are shown as a warning |
+| Demo page | 20 questions per session |
+
+The guardrail eval (`evals/guardrail_cases.jsonl`) covers investment advice, off-topic requests,
+instructions hidden in the question, and fake passages with hidden instructions slipped into the
+search results. Before adding the guardrails, Gemini already handled the first 18 cases correctly;
+the guardrails make refusals consistent and add checks that don't depend on the model behaving.
+The test checker itself needed fixing twice: a correct refusal like "there is no record that Tesla
+went bankrupt" contains the words it was looking for, so forbidden phrases now only count when the
+system actually answers.
 
 ## How it works
 
@@ -55,7 +88,8 @@ flowchart TD
     end
 
     subgraph Ask["Answer a question"]
-        Q[Question] --> P["Detect company name<br/>e.g. Walmart's -> WMT"]
+        Q[Question] --> V["Input check<br/>empty / over 500 chars"]
+        V --> P["Detect company name<br/>e.g. Walmart's -> WMT"]
         P --> S1[Embedding search<br/>top 120]
         P --> S2[Keyword search<br/>top 120]
         F -.-> S1
@@ -64,7 +98,8 @@ flowchart TD
         S2 --> R
         R --> RR["Rerank top 30<br/>bge-reranker-base (local)"]
         RR --> G["Gemini 3.8 Flash<br/>top 8 passages, JSON schema"]
-        G --> O["answerable + answer + citations"]
+        G --> OC["Output checks<br/>fixed refusals, citation required,<br/>unsupported numbers flagged"]
+        OC --> O["answer + citations<br/>or a refusal"]
     end
 ```
 
@@ -87,9 +122,12 @@ The demo page shows the answer, the cited passages, and a link to the original f
 ## Eval
 
 ```bash
-make eval-retrieval   # retrieval metrics only, no API calls
-make eval             # answers + grading (about $1 for 121 questions)
-make questions        # draft more questions with Gemini, then review them by hand
+make eval-retrieval    # retrieval metrics only, no API calls
+make eval              # answers + grading for all 144 questions (about $1)
+make guardrails        # the 21 guardrail cases (about $0.15)
+make check-questions   # automatic checks on the question set, no API calls
+make review            # go through the questions by hand: y = correct, n = wrong
+make questions         # draft more questions with Gemini, then check and review them
 uv run python evals/compare.py <run A>.jsonl <run B>.jsonl
 ```
 
@@ -131,11 +169,13 @@ and a bootstrap confidence interval over the per-question results.
   (e.g. Walmart's FY2026 advertising costs answered from the FY2025 filing).
 - Section labels are approximate; some financial statements get tagged with the wrong Item.
 - Questions that compare years or companies aren't handled specially yet.
+- The guardrail set is small (21 cases), so it shows the basics work, not that the system is
+  hard to attack.
 
 ## Next
 
-- Hand-check the question set and add unanswerable questions.
-- Check numeric answers in code instead of with the LLM grader.
+- Finish the hand review of the question set.
+- Add a judge from a different model family and compare it with my own labels.
 - Add a short header (company, year, section) to each chunk before embedding.
 - Split multi-year and multi-company questions into one search per filing.
 - Deploy the demo (Cloud Run + Neon) with rate limits and a spending cap.
@@ -150,6 +190,7 @@ and a bootstrap confidence interval over the per-question results.
 | `src/filings/retrieve.py` | Embedding, keyword, hybrid and reranked search |
 | `src/filings/query_parse.py` | Finds the company named in a question |
 | `src/filings/answer.py`, `llm.py` | Builds the prompt and calls Gemini with a JSON schema |
+| `src/filings/guardrails.py`, `numbers.py` | Input checks, fixed refusals, number matching for checks and evals |
 | `app/streamlit_app.py` | Demo page |
-| `evals/` | Question set, question generator, eval runner, paired comparison |
+| `evals/` | Question set, guardrail cases, eval runners, question review tool, paired comparison |
 | `tests/` | Unit tests (offline, no API key needed) |

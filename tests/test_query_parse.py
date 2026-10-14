@@ -6,6 +6,8 @@ from filings.query_parse import parse_query
 def test_detects_company_name_and_possessive():
     assert parse_query("What were Walmart's advertising costs?").ticker == "WMT"
     assert parse_query("How does JPMorgan Chase tier its models?").ticker == "JPM"
+    assert parse_query("What risks does JPMorganChase face?").ticker == "JPM"  # its own spelling
+    assert parse_query("When was LinkedIn fined under GDPR?").ticker == "MSFT"  # a subsidiary
 
 
 def test_detects_ticker_symbol_but_not_inside_words():

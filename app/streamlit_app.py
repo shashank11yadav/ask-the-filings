@@ -16,9 +16,11 @@ import streamlit as st
 from filings.answer import answer
 from filings.db import connect
 from filings.embed import embed_query
+from filings.guardrails import GuardrailError
 from filings.rerank import rerank_scores
 
 INDEX_DIR = Path("data/raw/index")  # saved by ingest.py: each company's 10-K download links
+MAX_QUESTIONS_PER_SESSION = 20  # guardrail: caps API spend if the page is shared publicly
 
 # Questions the system answers correctly in the eval (a mix of tables and text).
 EXAMPLES = [
@@ -84,17 +86,30 @@ if ask and not question.strip():
     st.info("Type a question first.")
     st.stop()
 
+st.session_state.setdefault("asked", 0)
+
 # ---------------- answer ----------------
 if ask:
-    if len(question) > 500:
-        st.error("Please keep questions under 500 characters.")
+    if st.session_state.asked >= MAX_QUESTIONS_PER_SESSION:
+        st.error(f"This demo allows {MAX_QUESTIONS_PER_SESSION} questions per session.")
         st.stop()
     ticker = None if company.startswith("Auto") else company
-    with st.spinner("Searching the filings and asking Gemini..."):
-        a = answer(question, ticker=ticker)
+    try:
+        with st.spinner("Searching the filings and asking Gemini..."):
+            a = answer(question, ticker=ticker)
+    except GuardrailError as e:
+        st.error(str(e))
+        st.stop()
+    st.session_state.asked += 1
 
     if a.answerable:
         st.success(a.answer)
+        if a.unsupported_numbers:
+            nums = ", ".join(f"{n:,g}" for n in a.unsupported_numbers)
+            st.warning(f"Check these figures: {nums} could not be found in the cited passages "
+                       "(they may be calculated or rounded).")
+    elif a.request_type != "filing_question":
+        st.info(a.answer)  # advice, predictions, off-topic: a polite fixed refusal
     else:
         # The system refused to guess: show that clearly, it's a feature, not an error.
         st.warning(f"**Not found in the filings.** {a.answer}")
@@ -119,7 +134,7 @@ if ask:
 
     # Everything retrieved, for transparency: shows what the model was given to read.
     others = [h for h in a.hits if h.id not in a.citations]
-    if others:
+    if others and a.request_type == "filing_question":
         with st.expander(f"Other passages retrieved but not cited ({len(others)})"):
             for h in others:
                 st.markdown(f"**{h.ticker} · FY{h.fiscal_year} · {h.section or '?'}**")
@@ -128,6 +143,6 @@ if ask:
 st.divider()
 st.caption(
     "Hybrid search (embeddings + keywords), cross-encoder reranking, then Gemini with a JSON schema. "
-    "Evaluated on 121 questions: 95% correct, 0 confident wrong answers. "
+    "Evaluated on 144 questions: 95% correct, 0 wrong answers, 26 of 27 unanswerable questions refused. "
     "Not financial advice."
 )

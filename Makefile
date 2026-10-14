@@ -5,7 +5,7 @@
 TICKERS ?= AAPL MSFT NVDA AMZN GOOGL JPM XOM UNH WMT TSLA
 YEARS ?= 2
 
-.PHONY: setup db ingest questions eval eval-retrieval demo test lint
+.PHONY: setup db ingest questions check-questions review eval eval-retrieval guardrails demo test lint
 
 # Install Python dependencies and create a blank .env to fill in (won't overwrite an existing one).
 setup:
@@ -32,13 +32,25 @@ ingest:
 questions:
 	uv run python evals/generate_questions.py --n 60
 
+# Automatic checks on the eval questions (no API calls).
+check-questions:
+	uv run python evals/review.py check
+
+# Review the eval questions one by one in the terminal (y = correct, n = wrong, s = skip, q = quit).
+review:
+	uv run python evals/review.py review
+
+# Guardrail tests: advice, predictions, off-topic and prompt-injection cases. Uses Gemini credits.
+guardrails:
+	uv run python evals/run_guardrails.py
+
 # Free eval: search quality only, no Gemini calls.
 eval-retrieval:
 	uv run python evals/run_eval.py --retrieval-only
 
 # Full eval: answers + judge. Uses Gemini credits.
 eval:
-	uv run python evals/run_eval.py
+	uv run python evals/run_eval.py --modes rerank --no-filters
 
 # Start the demo web page at http://localhost:8501 (needs `make db` running and data ingested).
 demo:
