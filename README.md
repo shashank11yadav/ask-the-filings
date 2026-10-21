@@ -201,3 +201,7 @@ and a bootstrap confidence interval over the per-question results.
 | `app/streamlit_app.py` | Demo page |
 | `evals/` | Question set, guardrail cases, eval runners, question checks, paired comparison |
 | `tests/` | Unit tests (offline, no API key needed) |
+
+## License
+
+MIT. See [LICENSE](LICENSE).

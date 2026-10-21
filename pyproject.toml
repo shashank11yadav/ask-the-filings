@@ -3,6 +3,8 @@ name = "ask-the-filings"
 version = "0.1.0"
 description = "Eval-driven RAG over SEC 10-K filings"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "psycopg[binary]>=3.2",
     "pgvector>=0.3",
