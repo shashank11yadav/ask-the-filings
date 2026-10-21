@@ -130,3 +130,6 @@ st.caption(
     "Evaluated on 144 questions: 95% correct, 0 wrong answers, 26 of 27 unanswerable questions refused. "
     "Not financial advice."
 )
+st.caption(
+    "Write-up: [shashankyadav.dev/work/ask-the-filings](https://www.shashankyadav.dev/work/ask-the-filings)"
+)
