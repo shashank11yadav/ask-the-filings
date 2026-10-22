@@ -11,3 +11,4 @@ jobs:
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run pytest -q  # unit tests need no API key or database
+      - run: uv run pip-audit --skip-editable
