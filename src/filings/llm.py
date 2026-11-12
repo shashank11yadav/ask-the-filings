@@ -18,7 +18,11 @@ def _get_client() -> genai.Client:
     if _client is None:
         if not settings.gemini_api_key:
             raise SystemExit("GEMINI_API_KEY is not set (add it to .env).")
-        _client = genai.Client(api_key=settings.gemini_api_key)
+        # google-genai 3 defaults to the v1 API; JSON-schema output was built and evaluated on v1beta.
+        _client = genai.Client(
+            api_key=settings.gemini_api_key,
+            http_options=types.HttpOptions(api_version="v1beta"),
+        )
     return _client
 
 
