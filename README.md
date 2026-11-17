@@ -111,7 +111,7 @@ Embedding and reranking run locally, so the only paid call is the final Gemini r
 
 ## Run it
 
-Needs Python 3.11+, [uv](https://docs.astral.sh/uv/) and Docker.
+Needs Python 3.11.5+, [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```bash
 make setup     # installs dependencies and creates a blank .env

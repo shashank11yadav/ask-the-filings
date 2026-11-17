@@ -2,7 +2,7 @@
 name = "ask-the-filings"
 version = "0.1.0"
 description = "Eval-driven RAG over SEC 10-K filings"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
@@ -30,6 +30,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/filings"]
+
+[tool.uv]
+# bs4 accepts any soupsieve; versions before 4.0.1 have denial-of-service advisories (GHSA-mmhr-3c5m-f64f).
+constraint-dependencies = ["soupsieve>=4.0.1"]
 
 [tool.ruff]
 line-length = 100
